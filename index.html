@@ -524,102 +524,106 @@ async function generateSubject(subjectId){
   btn.disabled=true;
   btn.innerHTML=`<span class="spinner"></span> AI 生成中，請稍候...`;
   lbarWrap.style.display='block';
-  let w=0;
-  const barTimer = setInterval(()=>{ w=Math.min(w+Math.random()*4+1,88); lbarInner.style.width=w+'%'; },500);
+  out.innerHTML='';
 
-  // Build list of already-used angles for this subject
-  const doneAngles = history.filter(h=>h.subject===subjectId).map(h=>h.angle).filter(Boolean).slice(-20);
+  const doneAngles = history.filter(h=>h.subject===subjectId).map(h=>h.angle).filter(Boolean);
   const doneStr = doneAngles.length>0
-    ? `\n已講過的切入角度（本次必須從不同角度教學，不可重複）：\n${doneAngles.slice(-12).join('、')}`
+    ? `已講過的角度（必須不同）：${doneAngles.slice(-12).join('、')}`
     : '';
 
   const subjectScope = {
-    stock:'可涵蓋：現貨交易規則、漲跌停板制度、融資融券、技術指標原理、K線型態、均線系統、量價關係、籌碼分析、財報解讀、產業輪動等',
-    fut:'可涵蓋：台指期合約規格、小台與大台差異、保證金制度與追繳、每日結算機制、轉倉成本、美股期貨規則、夜盤交易、期現貨價差、避險比率計算、逆價差正價差等',
-    opt:'可涵蓋：買權賣權定義、內含價值與時間價值、Delta/Gamma/Theta/Vega、隱含波動率、買方賣方思維、垂直價差/跨式/勒式策略、到期結算方式、週選月選差異等',
-    cb:'可涵蓋：可轉債基本結構、轉換溢價計算、CB與股價連動、強制贖回條款、回售條款、流動性風險、CB套利邏輯、違約風險評估等',
-    war:'可涵蓋：權證結構與股票差異、時間價值每日衰減、槓桿倍數計算、發行商避險行為、隱含波動率判斷、認購認售權證差異、選擇權vs權證比較、到期作廢風險等'
+    stock:'現貨規則、漲跌停、融資融券、K線型態、均線、量價、籌碼、財報、產業輪動',
+    fut:'台指期規格、小台大台差異、保證金追繳、每日結算、轉倉、美股期貨、夜盤、期現貨價差、正逆價差',
+    opt:'買賣權定義、內含價值、時間價值、Delta/Gamma/Theta/Vega、隱含波動率、垂直價差、跨式勒式、週選月選',
+    cb:'可轉債結構、轉換溢價、CB套利、強制贖回、回售條款、流動性風險、違約風險',
+    war:'權證結構、時間價值衰減、槓桿計算、發行商避險行為、隱含波動率、認購認售差異、到期作廢風險'
   };
 
-  const prompt = `你是專業交易教育家，專精${s.name}市場規則與實務。${doneStr}
-為台灣投資人生成今日${s.name}三堂課，覆蓋初階、中階、困難三個難度。
-${subjectScope[s.id]}
+  const levelDefs = {
+    easy:'初階：讀者剛接觸，解釋基礎規則，用生活化比喻',
+    mid:'中階：讀者懂基礎，深入機制細節、公式邏輯、操作注意事項',
+    hard:'困難：讀者有實戰經驗，教策略思維、風險量化、進階技巧'
+  };
 
-重要：標題可以類似，但每堂課的切入角度、內容重點、舉例必須完全不同。
+  if(!lessons[todayStr]) lessons[todayStr]=[];
 
-難度定義：
-- 初階：讀者剛接觸，解釋基礎規則，用生活化比喻讓人一看就懂
-- 中階：讀者懂基礎，深入機制細節、公式邏輯、實際操作注意事項
-- 困難：讀者有實戰經驗，教策略思維、風險量化、進階技巧與陷阱
+  let progress = 0;
+  const levels = ['easy','mid','hard'];
 
-每堂課格式（內容完整，不省略）：
-- topic：標題8字內
-- angle：本堂切入角度10字內（例如「保證金追繳的觸發條件」，下次生成時會用這個來避免重複）
-- p1：70-90字，說明概念與原理
-- p2：70-90字，舉台灣市場實際案例或具體數字
-- p3：70-90字，說明操作要點或常見錯誤
-- key：核心重點一句話40字內
-- chart：4個具體數字比較（使用真實或合理數字）
-- quiz：需理解才能答對的測驗題
+  for(const level of levels){
+    progress += 33;
+    lbarInner.style.width = progress+'%';
+    btn.innerHTML=`<span class="spinner"></span> 生成${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程...`;
 
-只回傳JSON，無其他文字：
-{"lessons":[
-{"level":"easy","topic":"標題","angle":"切入角度","p1":"...","p2":"...","p3":"...","key":"...","chart":{"title":"圖表標題","labels":["項目1","項目2","項目3","項目4"],"values":[數字,數字,數字,數字],"unit":"單位"},"quiz":{"q":"測驗問題","opts":["A.選項","B.選項","C.選項","D.選項"],"ans":0}},
-{"level":"mid","topic":"標題","angle":"切入角度","p1":"...","p2":"...","p3":"...","key":"...","chart":{...},"quiz":{...}},
-{"level":"hard","topic":"標題","angle":"切入角度","p1":"...","p2":"...","p3":"...","key":"...","chart":{...},"quiz":{...}}
-]}`;
+    const existAngle = doneAngles.length>0 ? `\n${doneStr}` : '';
+    const prompt = `你是${s.name}交易教育家。為台灣投資人生成一堂${s.name}課程。
+難度：${levelDefs[level]}
+可涵蓋範圍：${subjectScope[subjectId]}${existAngle}
 
-  try{
-    const res = await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2500,messages:[{role:'user',content:prompt}]})
-    });
-    clearInterval(barTimer); lbarInner.style.width='100%';
-    if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API錯誤'); }
-    const data = await res.json();
-    const raw = data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('\n');
-    const parsed = safeParseJSON(raw);
-    if(!parsed) throw new Error('AI 回傳格式異常，請再試一次');
+請選一個尚未講過的切入角度，只回傳以下JSON，不要有任何其他文字或符號：
+{"topic":"標題8字內","angle":"切入角度10字內","p1":"第一段80字說明概念原理","p2":"第二段80字舉台灣市場具體案例","p3":"第三段80字說明操作要點或常見錯誤","key":"核心重點一句話40字內","chart":{"title":"圖表標題","labels":["項目A","項目B","項目C","項目D"],"values":[50,75,30,90],"unit":"%"},"quiz":{"q":"測驗問題","opts":["A.選項一","B.選項二","C.選項三","D.選項四"],"ans":2}}`;
 
-    // Save to storage
-    if(!lessons[todayStr]) lessons[todayStr]=[];
-    parsed.lessons.forEach(l=>{
-      const existing = lessons[todayStr].findIndex(x=>x.subject===subjectId&&x.level===l.level);
-      const entry = {...l, subject:subjectId, id: subjectId+'_'+l.level+'_'+Date.now(), date:todayStr};
+    try{
+      const res = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'x-api-key':API_KEY,
+          'anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true'
+        },
+        body:JSON.stringify({
+          model:'claude-sonnet-4-5',
+          max_tokens:900,
+          messages:[{role:'user',content:prompt}]
+        })
+      });
+
+      if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API錯誤'); }
+      const data = await res.json();
+      const raw = data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('');
+
+      let parsed = null;
+      try{
+        const clean = raw.replace(/```json|```/g,'').trim();
+        const s1 = clean.indexOf('{'), e1 = clean.lastIndexOf('}');
+        if(s1!==-1&&e1!==-1) parsed = JSON.parse(clean.slice(s1,e1+1));
+      }catch(e){ parsed = null; }
+
+      if(!parsed){
+        out.innerHTML += `<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">
+          ${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程解析失敗，請重新生成</div>`;
+        continue;
+      }
+
+      const entry = {...parsed, level, subject:subjectId, id:`${subjectId}_${level}_${Date.now()}`, date:todayStr};
+
+      // Save
+      const existing = lessons[todayStr].findIndex(x=>x.subject===subjectId&&x.level===level);
       if(existing>=0) lessons[todayStr][existing]=entry;
       else lessons[todayStr].push(entry);
-      // Add to history — store angle for dedup
-      const hi = history.findIndex(x=>x.subject===subjectId&&x.level===l.level&&x.topic===l.topic);
-      if(hi<0) history.unshift({id:entry.id, subject:subjectId, level:l.level, topic:l.topic, angle:l.angle||'', date:todayStr});
-    });
-    localStorage.setItem(DATA_STORE, JSON.stringify(lessons));
-    localStorage.setItem(HIST_STORE, JSON.stringify(history));
+      history.unshift({id:entry.id, subject:subjectId, level, topic:parsed.topic, angle:parsed.angle||'', date:todayStr});
+      localStorage.setItem(DATA_STORE, JSON.stringify(lessons));
+      localStorage.setItem(HIST_STORE, JSON.stringify(history));
 
-    out.innerHTML = renderLessonsHTML(lessons[todayStr].filter(l=>l.subject===subjectId), subjectId);
-    renderSubjectCardHeader(subjectId);
-    updateStats();
-  }catch(e){
-    clearInterval(barTimer); lbarInner.style.width='100%';
-    out.innerHTML=`<div style="padding:12px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-top:8px;line-height:1.6">載入失敗：${e.message}</div>`;
+      // Render this card immediately
+      out.innerHTML += renderOneLessonCard(entry, false);
+      renderSubjectCardHeader(subjectId);
+      updateStats();
+
+      // Small delay between calls to avoid rate limit
+      if(level !== 'hard') await new Promise(r=>setTimeout(r,1200));
+
+    }catch(e){
+      out.innerHTML += `<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">
+        ${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程載入失敗：${e.message}</div>`;
+    }
   }
+
+  lbarInner.style.width='100%';
   setTimeout(()=>{ lbarWrap.style.display='none'; lbarInner.style.width='0'; },600);
   btn.disabled=false;
   btn.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> 重新生成`;
-}
-
-function renderSubjectCardHeader(subjectId){
-  const s = SUBJECTS.find(x=>x.id===subjectId);
-  const todayLessons = (lessons[todayStr]||[]).filter(l=>l.subject===subjectId);
-  const histCount = history.filter(h=>h.subject===subjectId).length;
-  const pillsEl = document.querySelector(`#sc-${subjectId} .sc-stats`);
-  if(pillsEl){
-    const levelPills = LEVELS.map(lv=>{
-      const done = todayLessons.find(l=>l.level===lv.id);
-      return `<span class="level-pill lp-${lv.id}" style="${done?'opacity:1':'opacity:.35'}">${lv.label}${done?' ✓':''}</span>`;
-    }).join('');
-    pillsEl.innerHTML=`<div class="sc-count">${histCount} 堂已學</div><div style="margin-top:6px">${levelPills}</div>`;
-  }
 }
 
 // ─── Render lesson cards HTML ───
