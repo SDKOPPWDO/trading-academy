@@ -522,106 +522,146 @@ async function generateSubject(subjectId){
   const out = document.getElementById('out-'+subjectId);
 
   btn.disabled=true;
-  btn.innerHTML=`<span class="spinner"></span> AI 生成中，請稍候...`;
   lbarWrap.style.display='block';
   out.innerHTML='';
 
   const doneAngles = history.filter(h=>h.subject===subjectId).map(h=>h.angle).filter(Boolean);
-  const doneStr = doneAngles.length>0
-    ? `已講過的角度（必須不同）：${doneAngles.slice(-12).join('、')}`
-    : '';
+  const doneStr = doneAngles.length>0 ? `已講過角度（避免重複）：${doneAngles.slice(-10).join('、')}` : '';
 
-  const subjectScope = {
-    stock:'現貨規則、漲跌停、融資融券、K線型態、均線、量價、籌碼、財報、產業輪動',
-    fut:'台指期規格、小台大台差異、保證金追繳、每日結算、轉倉、美股期貨、夜盤、期現貨價差、正逆價差',
-    opt:'買賣權定義、內含價值、時間價值、Delta/Gamma/Theta/Vega、隱含波動率、垂直價差、跨式勒式、週選月選',
-    cb:'可轉債結構、轉換溢價、CB套利、強制贖回、回售條款、流動性風險、違約風險',
-    war:'權證結構、時間價值衰減、槓桿計算、發行商避險行為、隱含波動率、認購認售差異、到期作廢風險'
+  const scopeMap={
+    stock:'現貨規則、漲跌停板、融資融券、K線型態、均線系統、量價關係、籌碼分析、財報解讀、產業輪動',
+    fut:'台指期規格、小台大台差異、保證金追繳機制、每日結算、轉倉成本、美股期貨規則、夜盤交易、正逆價差',
+    opt:'買賣權定義、內含時間價值、Delta Gamma Theta Vega、隱含波動率、垂直價差、跨式勒式策略、週選月選差異',
+    cb:'可轉債結構、轉換溢價計算、CB套利邏輯、強制贖回條款、回售條款、流動性風險、違約風險評估',
+    war:'權證結構、時間價值衰減、槓桿倍數計算、發行商避險行為、隱含波動率判斷、認購認售差異、到期作廢風險'
   };
-
-  const levelDefs = {
-    easy:'初階：讀者剛接觸，解釋基礎規則，用生活化比喻',
-    mid:'中階：讀者懂基礎，深入機制細節、公式邏輯、操作注意事項',
-    hard:'困難：讀者有實戰經驗，教策略思維、風險量化、進階技巧'
+  const levelMap={
+    easy:'初階（讀者剛接觸，用生活化比喻說明基礎規則）',
+    mid:'中階（讀者懂基礎，深入機制細節與操作注意事項）',
+    hard:'困難（讀者有實戰經驗，教策略思維與風險量化）'
   };
 
   if(!lessons[todayStr]) lessons[todayStr]=[];
-
-  let progress = 0;
-  const levels = ['easy','mid','hard'];
+  const levels=['easy','mid','hard'];
+  const levelNames={easy:'初階',mid:'中階',hard:'困難'};
+  let progress=0;
 
   for(const level of levels){
-    progress += 33;
-    lbarInner.style.width = progress+'%';
-    btn.innerHTML=`<span class="spinner"></span> 生成${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程...`;
+    progress+=33;
+    lbarInner.style.width=progress+'%';
+    btn.innerHTML=`<span class="spinner"></span> 生成${levelNames[level]}課程...`;
 
-    const existAngle = doneAngles.length>0 ? `\n${doneStr}` : '';
-    const prompt = `你是${s.name}交易教育家。為台灣投資人生成一堂${s.name}課程。
-難度：${levelDefs[level]}
-可涵蓋範圍：${subjectScope[subjectId]}${existAngle}
+    const prompt=`你是${s.name}交易教育家。為台灣投資人生成一堂${s.name}${levelMap[level]}課程。
+可涵蓋範圍：${scopeMap[subjectId]}
+${doneStr}
 
-請選一個尚未講過的切入角度，只回傳以下JSON，不要有任何其他文字或符號：
-{"topic":"標題8字內","angle":"切入角度10字內","p1":"第一段80字說明概念原理","p2":"第二段80字舉台灣市場具體案例","p3":"第三段80字說明操作要點或常見錯誤","key":"核心重點一句話40字內","chart":{"title":"圖表標題","labels":["項目A","項目B","項目C","項目D"],"values":[50,75,30,90],"unit":"%"},"quiz":{"q":"測驗問題","opts":["A.選項一","B.選項二","C.選項三","D.選項四"],"ans":2}}`;
+請用以下固定格式回覆，每個欄位用 <<<FIELD>>> 分隔，不要有多餘說明：
+<<<TOPIC>>>
+（標題，8字以內）
+<<<ANGLE>>>
+（本堂切入角度，10字以內）
+<<<P1>>>
+（第一段：概念與原理，約80字）
+<<<P2>>>
+（第二段：台灣市場具體案例，約80字）
+<<<P3>>>
+（第三段：操作要點或常見錯誤，約80字）
+<<<KEY>>>
+（核心重點一句話，40字以內）
+<<<CHART_TITLE>>>
+（圖表標題）
+<<<CHART_LABELS>>>
+（四個項目名稱，用逗號分隔，例如：台積電,鴻海,聯發科,廣達）
+<<<CHART_VALUES>>>
+（四個數字，用逗號分隔，例如：45,32,28,19）
+<<<CHART_UNIT>>>
+（單位，例如：% 或 元 或 倍）
+<<<QUIZ_Q>>>
+（測驗問題）
+<<<QUIZ_A>>>
+（選項A內容）
+<<<QUIZ_B>>>
+（選項B內容）
+<<<QUIZ_C>>>
+（選項C內容）
+<<<QUIZ_D>>>
+（選項D內容）
+<<<QUIZ_ANS>>>
+（正確答案是A B C D其中一個）
+<<<END>>>`;
 
     try{
-      const res = await fetch('https://api.anthropic.com/v1/messages',{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'x-api-key':API_KEY,
-          'anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true'
-        },
-        body:JSON.stringify({
-          model:'claude-sonnet-4-5',
-          max_tokens:900,
-          messages:[{role:'user',content:prompt}]
-        })
+        headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:900,messages:[{role:'user',content:prompt}]})
       });
+      if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'API錯誤');}
+      const data=await res.json();
+      const raw=data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('');
 
-      if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API錯誤'); }
-      const data = await res.json();
-      const raw = data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('');
+      // Parse with field markers — no JSON needed
+      function getField(name){
+        const re=new RegExp(`<<<${name}>>>\\s*([\\s\\S]*?)(?=<<<|$)`,'i');
+        const m=raw.match(re);
+        return m ? m[1].trim() : '';
+      }
+      const topic=getField('TOPIC');
+      const angle=getField('ANGLE');
+      const p1=getField('P1');
+      const p2=getField('P2');
+      const p3=getField('P3');
+      const key=getField('KEY');
+      const chartTitle=getField('CHART_TITLE');
+      const chartLabelsRaw=getField('CHART_LABELS');
+      const chartValuesRaw=getField('CHART_VALUES');
+      const chartUnit=getField('CHART_UNIT');
+      const quizQ=getField('QUIZ_Q');
+      const quizA=getField('QUIZ_A');
+      const quizB=getField('QUIZ_B');
+      const quizC=getField('QUIZ_C');
+      const quizD=getField('QUIZ_D');
+      const quizAnsRaw=getField('QUIZ_ANS').trim().toUpperCase();
 
-      let parsed = null;
-      try{
-        const clean = raw.replace(/```json|```/g,'').trim();
-        const s1 = clean.indexOf('{'), e1 = clean.lastIndexOf('}');
-        if(s1!==-1&&e1!==-1) parsed = JSON.parse(clean.slice(s1,e1+1));
-      }catch(e){ parsed = null; }
-
-      if(!parsed){
-        out.innerHTML += `<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">
-          ${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程解析失敗，請重新生成</div>`;
+      if(!topic||!p1){
+        out.innerHTML+=`<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">${levelNames[level]}課程回傳格式異常，請重新生成</div>`;
         continue;
       }
 
-      const entry = {...parsed, level, subject:subjectId, id:`${subjectId}_${level}_${Date.now()}`, date:todayStr};
+      const labels=chartLabelsRaw.split(',').map(x=>x.trim()).filter(Boolean);
+      const values=chartValuesRaw.split(',').map(x=>parseFloat(x.trim())||0);
+      const ansMap={A:0,B:1,C:2,D:3};
+      const ansIdx=ansMap[quizAnsRaw]??0;
 
-      // Save
-      const existing = lessons[todayStr].findIndex(x=>x.subject===subjectId&&x.level===level);
+      const entry={
+        topic, angle, p1, p2, p3, key,
+        chart:{title:chartTitle,labels,values,unit:chartUnit},
+        quiz:{q:quizQ,opts:['A. '+quizA,'B. '+quizB,'C. '+quizC,'D. '+quizD],ans:ansIdx},
+        level, subject:subjectId,
+        id:`${subjectId}_${level}_${Date.now()}`,
+        date:todayStr
+      };
+
+      const existing=lessons[todayStr].findIndex(x=>x.subject===subjectId&&x.level===level);
       if(existing>=0) lessons[todayStr][existing]=entry;
       else lessons[todayStr].push(entry);
-      history.unshift({id:entry.id, subject:subjectId, level, topic:parsed.topic, angle:parsed.angle||'', date:todayStr});
-      localStorage.setItem(DATA_STORE, JSON.stringify(lessons));
-      localStorage.setItem(HIST_STORE, JSON.stringify(history));
+      history.unshift({id:entry.id,subject:subjectId,level,topic,angle:angle||'',date:todayStr});
+      localStorage.setItem(DATA_STORE,JSON.stringify(lessons));
+      localStorage.setItem(HIST_STORE,JSON.stringify(history));
 
-      // Render this card immediately
-      out.innerHTML += renderOneLessonCard(entry, false);
+      out.innerHTML+=renderOneLessonCard(entry,false);
       renderSubjectCardHeader(subjectId);
       updateStats();
 
-      // Small delay between calls to avoid rate limit
-      if(level !== 'hard') await new Promise(r=>setTimeout(r,1200));
+      if(level!=='hard') await new Promise(r=>setTimeout(r,1000));
 
     }catch(e){
-      out.innerHTML += `<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">
-        ${level==='easy'?'初階':level==='mid'?'中階':'困難'}課程載入失敗：${e.message}</div>`;
+      out.innerHTML+=`<div style="padding:10px 14px;background:var(--rbg);border:0.5px solid var(--red);border-radius:8px;font-size:12px;color:var(--red);margin-bottom:10px">${levelNames[level]}課程載入失敗：${e.message}</div>`;
     }
   }
 
   lbarInner.style.width='100%';
-  setTimeout(()=>{ lbarWrap.style.display='none'; lbarInner.style.width='0'; },600);
+  setTimeout(()=>{lbarWrap.style.display='none';lbarInner.style.width='0';},600);
   btn.disabled=false;
   btn.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg> 重新生成`;
 }
