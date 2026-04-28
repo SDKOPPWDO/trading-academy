@@ -479,6 +479,40 @@ function renderSubjectGrid(){
   }).join('');
 }
 
+// ─── Safe JSON parser ───
+function safeParseJSON(raw){
+  // Step 1: strip markdown fences
+  let s = raw.replace(/```json|```/g,'').trim();
+  // Step 2: find outermost {}
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if(start===-1||end===-1) return null;
+  s = s.slice(start, end+1);
+  // Step 3: try direct parse
+  try{ return JSON.parse(s); }catch(e){}
+  // Step 4: sanitize — remove literal newlines inside string values
+  // Replace actual newlines inside quoted strings with \n
+  s = s.replace(/"((?:[^"\\]|\\.)*)"/g, (_,inner)=>{
+    const fixed = inner
+      .replace(/\n/g,'__NL__')
+      .replace(/[\r\n]+/g,' ')
+      .replace(/__NL__/g,'\\n')
+      .replace(/\t/g,' ')
+      .replace(/"/g,'\\"');
+    return '"'+fixed+'"';
+  });
+  try{ return JSON.parse(s); }catch(e){}
+  // Step 5: extract lessons array manually if full parse fails
+  try{
+    const lessonsMatch = s.match(/"lessons"\s*:\s*(\[[\s\S]*\])/);
+    if(lessonsMatch){
+      const arr = JSON.parse(lessonsMatch[1]);
+      return {lessons: arr};
+    }
+  }catch(e){}
+  return null;
+}
+
 // ─── Generate ───
 async function generateSubject(subjectId){
   const s = SUBJECTS.find(x=>x.id===subjectId);
@@ -539,14 +573,14 @@ ${subjectScope[s.id]}
     const res = await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2000,messages:[{role:'user',content:prompt}]})
+      body:JSON.stringify({model:'claude-sonnet-4-5',max_tokens:2500,messages:[{role:'user',content:prompt}]})
     });
     clearInterval(barTimer); lbarInner.style.width='100%';
     if(!res.ok){ const e=await res.json(); throw new Error(e.error?.message||'API錯誤'); }
     const data = await res.json();
     const raw = data.content.map(i=>i.type==='text'?i.text:'').filter(Boolean).join('\n');
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const parsed = JSON.parse(clean.slice(clean.indexOf('{'),clean.lastIndexOf('}')+1));
+    const parsed = safeParseJSON(raw);
+    if(!parsed) throw new Error('AI 回傳格式異常，請再試一次');
 
     // Save to storage
     if(!lessons[todayStr]) lessons[todayStr]=[];
